@@ -51,7 +51,7 @@ def get_job_status(job_id, data):
         
         # Check if the job file exists
         if not os.path.exists(job_file_path):
-            return {"error": "Job not found", "job_id": get_job_id}, endpoint, 404
+            return {"error": "Job not found", "job_id": get_job_id}, "/v1/toolkit/job/status", 404
         
         # Read the job status file
         with open(job_file_path, 'r') as file:
@@ -62,4 +62,4 @@ def get_job_status(job_id, data):
         
     except Exception as e:
         logger.error(f"Error retrieving status for job {get_job_id}: {str(e)}")
-        return {"error": f"Failed to retrieve job status: {str(e)}"}, endpoint, 500 
+        return {"error": f"Failed to retrieve job status: {str(e)}"}, "/v1/toolkit/job/status", 500 
