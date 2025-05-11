@@ -129,6 +129,6 @@ def worker_task():
 
 def when_ready(server):
     """Hook called when the server is ready."""
-    if os.environ.get("ENDPOINT") and os.environ.get("PAYLOAD"):
+    if os.environ.get("CLOUD_RUN_JOB", "").lower() in ("true", "1", "yes"):
         thread = threading.Thread(target=worker_task)
         thread.start()
