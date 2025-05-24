@@ -1,10 +1,11 @@
-name: Docker Build for Feature or Fix Branches
+name: Docker Build for Feature, Fix, and Testing Branches
 
 on:
   push:
     branches:
       - 'feature/*'
       - 'fix/*'
+      - 'testing'
 
 jobs:
   build:
@@ -28,7 +29,13 @@ jobs:
       run: |
         REPO_NAME="${GITHUB_REPOSITORY##*/}"
         BRANCH="${GITHUB_REF#refs/heads/}"
-        TAG="${BRANCH#*/}"  # Strip 'feature/' or 'fix/'
+
+        if [ "$BRANCH" = "testing" ]; then
+          TAG="testing"
+        else
+          TAG="${BRANCH#*/}"  # Strip 'feature/' or 'fix/'
+        fi
+
         echo "Repository name: $REPO_NAME"
         echo "Docker tag: $TAG"
         echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
