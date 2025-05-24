@@ -31,9 +31,11 @@ jobs:
         echo "Using Docker tag: $TAG"
         echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-    - name: Build and push Docker image
+    - name: Build and push Docker image with cache
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/no-code-architects-toolkit:${{ steps.extract_tag.outputs.tag }}
+        cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/no-code-architects-toolkit:cache
+        cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/no-code-architects-toolkit:cache,mode=max
