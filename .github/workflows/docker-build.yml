@@ -23,12 +23,15 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Extract Docker tag from branch name
-      id: extract_tag
+    - name: Extract repo name and Docker tag
+      id: extract
       run: |
+        REPO_NAME="${GITHUB_REPOSITORY##*/}"
         BRANCH="${GITHUB_REF#refs/heads/}"
         TAG="${BRANCH#*/}"  # Strip 'feature/' or 'fix/'
-        echo "Using Docker tag: $TAG"
+        echo "Repository name: $REPO_NAME"
+        echo "Docker tag: $TAG"
+        echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
         echo "tag=$TAG" >> $GITHUB_OUTPUT
 
     - name: Build and push Docker image with cache
@@ -36,6 +39,6 @@ jobs:
       with:
         context: .
         push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/no-code-architects-toolkit:${{ steps.extract_tag.outputs.tag }}
-        cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/no-code-architects-toolkit:cache
-        cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/no-code-architects-toolkit:cache,mode=max
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.extract.outputs.repo_name }}:${{ steps.extract.outputs.tag }}
+        cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.extract.outputs.repo_name }}:cache
+        cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.extract.outputs.repo_name }}:cache,mode=max
