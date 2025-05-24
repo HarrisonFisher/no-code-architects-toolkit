@@ -1,11 +1,12 @@
-name: Docker Build for Feature, Fix, and Testing Branches
+name: Docker Build and Push
 
 on:
   push:
     branches:
+      - 'main'
+      - 'testing'
       - 'feature/*'
       - 'fix/*'
-      - 'testing'
 
 jobs:
   build:
@@ -30,7 +31,9 @@ jobs:
         REPO_NAME="${GITHUB_REPOSITORY##*/}"
         BRANCH="${GITHUB_REF#refs/heads/}"
 
-        if [ "$BRANCH" = "testing" ]; then
+        if [ "$BRANCH" = "main" ]; then
+          TAG="latest"
+        elif [ "$BRANCH" = "testing" ]; then
           TAG="testing"
         else
           TAG="${BRANCH#*/}"  # Strip 'feature/' or 'fix/'
