@@ -649,12 +649,105 @@ def process_subtitle_events(transcription_result, style_type, settings, replace_
     """
     return srt_to_ass(transcription_result, style_type, settings, replace_dict, video_resolution)
 
-def process_captioning_v1(video_url, captions, settings, replace, job_id, language='auto'):
+def parse_time_string(time_str):
+    """Parse a time string in hh:mm:ss.ms or mm:ss.ms or ss.ms format to seconds (float)."""
+    import re
+    if not isinstance(time_str, str):
+        raise ValueError("Time value must be a string in hh:mm:ss.ms format.")
+    pattern = r"^(?:(\d+):)?(\d{1,2}):(\d{2}(?:\.\d{1,3})?)$"
+    match = re.match(pattern, time_str)
+    if not match:
+        # Try ss.ms only
+        try:
+            return float(time_str)
+        except Exception:
+            raise ValueError(f"Invalid time string: {time_str}")
+    h, m, s = match.groups(default="0")
+    total_seconds = int(h) * 3600 + int(m) * 60 + float(s)
+    return total_seconds
+
+def filter_subtitle_lines(sub_content, exclude_time_ranges, subtitle_type):
+    """
+    Remove subtitle lines/blocks that overlap with exclude_time_ranges.
+    Supports 'ass' and 'srt' subtitle_type.
+    """
+
+    def parse_ass_time(ass_time):
+        try:
+            h, m, rest = ass_time.split(":")
+            s, cs = rest.split(".")
+            return int(h) * 3600 + int(m) * 60 + int(s) + int(cs) / 100
+        except Exception:
+            return 0
+    def parse_time_range(rng):
+        start = parse_time_string(rng['start'])
+        end = parse_time_string(rng['end'])
+        return {'start': start, 'end': end}
+    parsed_ranges = [parse_time_range(rng) for rng in exclude_time_ranges]
+    if not exclude_time_ranges:
+        return sub_content
+    if subtitle_type == 'ass':
+        lines = sub_content.splitlines()
+        filtered_lines = []
+        for line in lines:
+            if line.startswith("Dialogue:"):
+                parts = line.split(",", 10)
+                if len(parts) > 3:
+                    start = parse_ass_time(parts[1])
+                    end = parse_ass_time(parts[2])
+                    overlap = False
+                    for rng in parsed_ranges:
+                        if start < rng['end'] and end > rng['start']:
+                            overlap = True
+                            break
+                    if overlap:
+                        continue
+            filtered_lines.append(line)
+        return "\n".join(filtered_lines)
+    elif subtitle_type == 'srt':
+        subtitles = list(srt.parse(sub_content))
+        filtered = []
+        for sub in subtitles:
+            start = sub.start.total_seconds()
+            end = sub.end.total_seconds()
+            overlap = False
+            for rng in parsed_ranges:
+                if start < rng['end'] and end > rng['start']:
+                    overlap = True
+                    break
+            if not overlap:
+                filtered.append(sub)
+        return srt.compose(filtered)
+    else:
+        return sub_content
+
+def normalize_exclude_time_ranges(exclude_time_ranges):
+    norm = []
+    for rng in exclude_time_ranges:
+        start = rng.get("start")
+        end = rng.get("end")
+        if not isinstance(start, str) or not isinstance(end, str):
+            raise ValueError("exclude_time_ranges start/end must be strings in hh:mm:ss.ms format.")
+        start_sec = parse_time_string(start)
+        end_sec = parse_time_string(end)
+        if start_sec < 0 or end_sec < 0:
+            raise ValueError("exclude_time_ranges start/end must be non-negative.")
+        if end_sec <= start_sec:
+            raise ValueError("exclude_time_ranges end must be strictly greater than start.")
+        norm.append({"start": start, "end": end})
+    return norm
+
+def generate_ass_captions_v1(video_url, captions, settings, replace, exclude_time_ranges, job_id, language='auto', PlayResX=None, PlayResY=None):
     """
     Captioning process with transcription fallback and multiple styles.
     Integrates with the updated logic for positioning and alignment.
+    If PlayResX and PlayResY are provided, use them for ASS generation; otherwise, get from video.
     """
     try:
+        # Normalize exclude_time_ranges to ensure start/end are floats
+        if exclude_time_ranges:
+            exclude_time_ranges = normalize_exclude_time_ranges(exclude_time_ranges)
+
         if not isinstance(settings, dict):
             logger.error(f"Job {job_id}: 'settings' should be a dictionary.")
             return {"error": "'settings' should be a dictionary."}
@@ -712,9 +805,13 @@ def process_captioning_v1(video_url, captions, settings, replace, job_id, langua
             # For non-font errors, do NOT include available_fonts
             return {"error": str(e)}
 
-        # Get video resolution
-        video_resolution = get_video_resolution(video_path)
-        logger.info(f"Job {job_id}: Video resolution detected = {video_resolution[0]}x{video_resolution[1]}")
+        # Get video resolution, unless provided
+        if PlayResX is not None and PlayResY is not None:
+            video_resolution = (PlayResX, PlayResY)
+            logger.info(f"Job {job_id}: Using provided PlayResX/PlayResY = {PlayResX}x{PlayResY}")
+        else:
+            video_resolution = get_video_resolution(video_path)
+            logger.info(f"Job {job_id}: Video resolution detected = {video_resolution[0]}x{video_resolution[1]}")
 
         # Determine style type
         style_type = style_options.get('style', 'classic').lower()
@@ -757,6 +854,14 @@ def process_captioning_v1(video_url, captions, settings, replace, job_id, langua
             else:
                 return {"error": subtitle_content['error']}
 
+        # After subtitle_content is generated and before saving to file:
+        if exclude_time_ranges:
+            subtitle_content = filter_subtitle_lines(subtitle_content, exclude_time_ranges, subtitle_type)
+            if subtitle_type == 'ass':
+                logger.info(f"Job {job_id}: Filtered ASS Dialogue lines due to exclude_time_ranges.")
+            elif subtitle_type == 'srt':
+                logger.info(f"Job {job_id}: Filtered SRT subtitle blocks due to exclude_time_ranges.")
+
         # Save the subtitle content
         subtitle_filename = f"{job_id}.{subtitle_type}"
         subtitle_path = os.path.join(LOCAL_STORAGE_PATH, subtitle_filename)
@@ -768,25 +873,7 @@ def process_captioning_v1(video_url, captions, settings, replace, job_id, langua
             logger.error(f"Job {job_id}: Failed to save subtitle file: {str(e)}")
             return {"error": f"Failed to save subtitle file: {str(e)}"}
 
-        # Prepare output filename and path
-        output_filename = f"{job_id}_captioned.mp4"
-        output_path = os.path.join(LOCAL_STORAGE_PATH, output_filename)
-
-        # Process video with subtitles using FFmpeg
-        try:
-            ffmpeg.input(video_path).output(
-                output_path,
-                vf=f"subtitles='{subtitle_path}'",
-                acodec='copy'
-            ).run(overwrite_output=True)
-            logger.info(f"Job {job_id}: FFmpeg processing completed. Output saved to {output_path}")
-        except ffmpeg.Error as e:
-            stderr_output = e.stderr.decode('utf8') if e.stderr else 'Unknown error'
-            logger.error(f"Job {job_id}: FFmpeg error: {stderr_output}")
-            return {"error": f"FFmpeg error: {stderr_output}"}
-
-        return output_path
-
+        return subtitle_path
     except Exception as e:
-        logger.error(f"Job {job_id}: Error in process_captioning_v1: {str(e)}", exc_info=True)
+        logger.error(f"Job {job_id}: Error in generate_ass_captions_v1: {str(e)}", exc_info=True)
         return {"error": str(e)}

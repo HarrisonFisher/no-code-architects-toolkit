@@ -1,12 +1,12 @@
-# Video Captioning Endpoint (v1)
+# ASS Subtitle Generation Endpoint (v1)
 
 ## 1. Overview
 
-The `/v1/video/caption` endpoint is part of the Video API and is responsible for adding captions to a video file. It accepts a video URL, caption text, and various styling options for the captions. The endpoint utilizes the `process_captioning_v1` service to generate a captioned video file, which is then uploaded to cloud storage, and the cloud URL is returned in the response.
+The `/v1/media/generate/ass` endpoint is part of the Media API and is responsible for generating an ASS (Advanced SubStation Alpha) subtitle file from a media file (typically a video or audio). It accepts a media URL and various styling options for the subtitles. The endpoint utilizes the `generate_ass_captions_v1` service to generate the ASS file, which is then uploaded to cloud storage, and the cloud URL is returned in the response.
 
 ## 2. Endpoint
 
-**URL:** `/v1/video/caption`
+**URL:** `/v1/media/generate/ass`
 **Method:** `POST`
 
 ## 3. Request
@@ -18,22 +18,21 @@ The `/v1/video/caption` endpoint is part of the Video API and is responsible for
 ### Body Parameters
 
 The request body must be a JSON object with the following properties:
+> **Note:** `canvas_width` and `canvas_height` are recommended for audio files (e.g., MP3) to control the subtitle canvas size.
 
-- `video_url` (string, required): The URL of the video file to be captioned.
-- `captions` (string, optional): Can be one of the following:
-  - Raw caption text to be added to the video
-  - URL to an SRT subtitle file
-  - URL to an ASS subtitle file
-  - If not provided, the system will automatically generate captions by transcribing the audio from the video
-- `settings` (object, optional): An object containing various styling options for the captions. See the schema below for available options.
-- `replace` (array, optional): An array of objects with `find` and `replace` properties, specifying text replacements to be made in the captions.
-- `webhook_url` (string, optional): A URL to receive a webhook notification when the captioning process is complete.
-- `id` (string, optional): An identifier for the request.
-- `language` (string, optional): The language code for the captions (e.g., "en", "fr"). Defaults to "auto".
-- `exclude_time_ranges` (array, optional): List of time ranges to skip when adding captions. Each item must be an object with:
+- `media_url` (string, required): The URL of the media file (video or audio) to generate subtitles for.
+- `canvas_width` (integer, optional): Subtitle canvas width in pixels.
+- `canvas_height` (integer, optional): Subtitle canvas height in pixels.
+- `settings` (object, optional): An object containing various styling options for the subtitles. See the schema below for available options.
+- `replace` (array, optional): An array of objects with `find` and `replace` properties, specifying text replacements to be made in the subtitles.
+- `exclude_time_ranges` (array, optional): List of time ranges to skip when generating subtitles. Each item must be an object with:
   - `start`: (string, required) The start time of the excluded range, as a string timecode in `hh:mm:ss.ms` format (e.g., `00:01:23.456`).
   - `end`: (string, required) The end time, as a string timecode in `hh:mm:ss.ms` format, which must be strictly greater than `start`.
-  If either value is not a valid timecode string, or if `end` is not greater than `start`, the request will return an error.
+- `language` (string, optional): The language code for the subtitles (e.g., "en", "fr"). Defaults to "auto".
+- `webhook_url` (string, optional): A URL to receive a webhook notification when the subtitle generation process is complete.
+- `id` (string, optional): An identifier for the request.
+
+
 
 #### Settings Schema
 
@@ -69,7 +68,7 @@ The request body must be a JSON object with the following properties:
         "style": {
             "type": "string",
             "enum": [
-                "classic",     // Regular captioning with all text displayed at once
+                "classic",     // Regular subtitle with all text displayed at once
                 "karaoke",     // Highlights words sequentially in a karaoke style
                 "highlight",   // Shows full text but highlights the current word
                 "underline",   // Shows full text but underlines the current word
@@ -87,19 +86,18 @@ The request body must be a JSON object with the following properties:
 
 ### Example Requests
 
-#### Example 1: Basic Automatic Captioning
+#### Example 1: Basic Automatic Subtitle Generation
 ```json
 {
-    "video_url": "https://example.com/video.mp4"
+    "media_url": "https://example.com/video.mp4"
 }
 ```
-This minimal request will automatically transcribe the video and add white captions at the bottom center.
+This minimal request will automatically transcribe the media and generate white subtitles at the bottom center.
 
-#### Example 2: Custom Text with Styling
+#### Example 2: Custom Styling
 ```json
 {
-    "video_url": "https://example.com/video.mp4",
-    "captions": "This is a sample caption text.",
+    "media_url": "https://example.com/video.mp4",
     "settings": {
         "style": "classic",
         "line_color": "#FFFFFF",
@@ -113,10 +111,10 @@ This minimal request will automatically transcribe the video and add white capti
 }
 ```
 
-#### Example 3: Karaoke-Style Captions with Advanced Options
+#### Example 3: Karaoke-Style Subtitles with Advanced Options
 ```json
 {
-    "video_url": "https://example.com/video.mp4",
+    "media_url": "https://example.com/video.mp4",
     "settings": {
         "line_color": "#FFFFFF",
         "word_color": "#FFFF00",
@@ -149,25 +147,10 @@ This minimal request will automatically transcribe the video and add white capti
 }
 ```
 
-#### Example 4: Using an External Subtitle File
+#### Example 4: Excluding Time Ranges from Subtitle Generation
 ```json
 {
-    "video_url": "https://example.com/video.mp4",
-    "captions": "https://example.com/subtitles.srt",
-    "settings": {
-        "line_color": "#FFFFFF",
-        "outline_color": "#000000",
-        "position": "bottom_center",
-        "font_family": "Arial",
-        "font_size": 24
-    }
-}
-```
-
-#### Example 5: Excluding Time Ranges from Captioning
-```json
-{
-    "video_url": "https://example.com/video.mp4",
+    "media_url": "https://example.com/video.mp4",
     "settings": {
         "style": "classic",
         "line_color": "#FFFFFF",
@@ -183,12 +166,29 @@ This minimal request will automatically transcribe the video and add white capti
 }
 ```
 
+#### Example 5: Generating Subtitles for an MP3 (Audio) File
+```json
+{
+    "canvas_width": 1280,
+    "canvas_height": 720,
+    "media_url": "https://example.com/audio.mp3",
+    "settings": {
+        "style": "classic",
+        "font_family": "Arial",
+        "font_size": 32,
+        "line_color": "#FFFFFF",
+        "outline_color": "#000000"
+    }
+}
+```
+
+
 ```bash
 curl -X POST \
      -H "x-api-key: YOUR_API_KEY" \
      -H "Content-Type: application/json" \
      -d '{
-        "video_url": "https://example.com/video.mp4",
+        "media_url": "https://example.com/video.mp4",
         "settings": {
             "line_color": "#FFFFFF",
             "word_color": "#FFFF00",
@@ -210,7 +210,7 @@ curl -X POST \
         ],
         "id": "custom-request-id"
     }' \
-    https://your-api-endpoint.com/v1/video/caption
+    https://your-api-endpoint.com/v1/media/generate/ass
 ```
 
 ## 4. Response
@@ -222,7 +222,7 @@ The response will be a JSON object with the following properties:
 - `code` (integer): The HTTP status code (200 for success).
 - `id` (string): The request identifier, if provided in the request.
 - `job_id` (string): A unique identifier for the job.
-- `response` (string): The cloud URL of the captioned video file.
+- `response` (string): The cloud URL of the generated ASS subtitle file.
 - `message` (string): A success message.
 - `pid` (integer): The process ID of the worker that processed the request.
 - `queue_id` (integer): The ID of the queue used for processing the request.
@@ -239,13 +239,13 @@ Example:
     "code": 200,
     "id": "request-123",
     "job_id": "d290f1ee-6c54-4b01-90e6-d701748f0851",
-    "response": "https://cloud.example.com/captioned-video.mp4",
+    "response": "https://cloud.example.com/generated-subtitles.ass",
     "message": "success",
     "pid": 12345,
     "queue_id": 140682639937472,
-    "run_time": 5.234,
-    "queue_time": 0.012,
-    "total_time": 5.246,
+    "run_time": 2.345,
+    "queue_time": 0.010,
+    "total_time": 2.355,
     "queue_length": 0,
     "build_number": "1.0.0"
 }
@@ -295,7 +295,7 @@ Example:
     "code": 500,
     "id": "request-123",
     "job_id": "d290f1ee-6c54-4b01-90e6-d701748f0851",
-    "error": "An unexpected error occurred during the captioning process.",
+    "error": "An unexpected error occurred during the subtitle generation process.",
     "pid": 12345,
     "queue_id": 140682639937472,
     "queue_length": 0,
@@ -309,46 +309,42 @@ The endpoint handles the following common errors:
 
 - **Missing or Invalid Parameters**: If any required parameters are missing or invalid, a 400 Bad Request error is returned with a descriptive error message.
 - **Font Error**: If the requested font is not available, a 400 Bad Request error is returned with a list of available fonts.
-- **Internal Server Error**: If an unexpected error occurs during the captioning process, a 500 Internal Server Error is returned with an error message.
+- **Internal Server Error**: If an unexpected error occurs during the subtitle generation process, a 500 Internal Server Error is returned with an error message.
 
 Additionally, the main application context (`app.py`) includes error handling for queue overload. If the maximum queue length (`MAX_QUEUE_LENGTH`) is set and the queue size reaches that limit, a 429 Too Many Requests error is returned with a descriptive message.
 
 ## 6. Usage Notes
 
-- The `video_url` parameter must be a valid URL pointing to a video file (MP4, MOV, etc.).
-- The `captions` parameter is optional and can be used in multiple ways:
-  - If not provided, the endpoint will automatically transcribe the audio and generate captions
-  - If provided as plain text, the text will be used as captions for the entire video
-  - If provided as a URL to an SRT or ASS subtitle file, the system will use that file for captioning
-  - For SRT files, only 'classic' style is supported
-  - For ASS files, the original styling will be preserved
-- The `settings` parameter allows for customization of the caption appearance and behavior:
-  - `style` determines how captions are displayed, with options including:
-    - `classic`: Regular captioning with all text displayed at once
+- The `media_url` parameter must be a valid URL pointing to a video or audio file.
+- The `settings` parameter allows for customization of the subtitle appearance and behavior:
+  - `style` determines how subtitles are displayed, with options including:
+    - `classic`: Regular subtitle with all text displayed at once
     - `karaoke`: Highlights words sequentially in a karaoke style as they're spoken
-    - `highlight`: Shows the full caption text but highlights each word as it's spoken
-    - `underline`: Shows the full caption text but underlines each word as it's spoken
+    - `highlight`: Shows the full subtitle text but highlights each word as it's spoken
+    - `underline`: Shows the full subtitle text but underlines each word as it's spoken
     - `word_by_word`: Shows only one word at a time
-  - `position` can be used to place captions in one of nine positions on the screen
+  - `position` can be used to place subtitles in one of nine positions on the screen
   - `alignment` determines text alignment within the position (left, center, right)
   - `font_family` can be any available system font
   - Color options can be set using hex codes (e.g., "#FFFFFF" for white)
-- The `replace` parameter can be used to perform text replacements in the captions (useful for correcting words or censoring content).
-- The `webhook_url` parameter is optional and can be used to receive a notification when the captioning process is complete.
+- The `replace` parameter can be used to perform text replacements in the subtitles (useful for correcting words or censoring content).
+- The `webhook_url` parameter is optional and can be used to receive a notification when the subtitle generation process is complete.
 - The `id` parameter is optional and can be used to identify the request in webhook responses.
-- The `language` parameter is optional and can be used to specify the language of the captions for transcription. If not provided, the language will be automatically detected.
-- The `exclude_time_ranges` parameter can be used to specify time ranges to be excluded from captioning.
+- The `language` parameter is optional and can be used to specify the language of the subtitles for transcription. If not provided, the language will be automatically detected.
+- The `exclude_time_ranges` parameter can be used to specify time ranges to be excluded from subtitle generation.
+- If either `canvas_width` or `canvas_height` is provided, both must be provided and must be greater than 0.
 
 ## 7. Common Issues
 
-- Providing an invalid or inaccessible `video_url`.
+- Providing an invalid or inaccessible `media_url`.
 - Requesting an unavailable font in the `settings` object.
+- Using this endpoint with an audio-only file (e.g., MP3) and not providing both `canvas_width` and `canvas_height`. For audio files, you must specify both dimensions to generate a valid ASS subtitle file.
 - Exceeding the maximum queue length, resulting in a 429 Too Many Requests error.
 
 ## 8. Best Practices
 
-- Validate the `video_url` parameter before sending the request to ensure it points to a valid and accessible video file.
-- Use the `webhook_url` parameter to receive notifications about the captioning process, rather than polling the API for updates.
+- Validate the `media_url` parameter before sending the request to ensure it points to a valid and accessible media file.
+- Use the `webhook_url` parameter to receive notifications about the subtitle generation process, rather than polling the API for updates.
 - Provide descriptive and meaningful `id` values to easily identify requests in logs and responses.
-- Use the `replace` parameter judiciously to avoid unintended text replacements in the captions.
-- Consider caching the captioned video files for frequently requested videos to improve performance and reduce processing time.
+- Use the `replace` parameter judiciously to avoid unintended text replacements in the subtitles.
+- Consider caching the generated ASS files for frequently requested media to improve performance and reduce processing time.
