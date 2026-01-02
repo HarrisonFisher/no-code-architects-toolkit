@@ -122,6 +122,7 @@ def process_ffmpeg_compose(data, job_id):
             input_path = download_file(file_url, LOCAL_STORAGE_PATH)
             download_cache[file_url] = input_path
         input_paths.append(input_path)
+        if input_path.endswith('.m3u8'): command.extend(["-protocol_whitelist", "file,https,tcp,tls,crypto,data"])
         command.extend(["-i", input_path])
     
     # Add filters
